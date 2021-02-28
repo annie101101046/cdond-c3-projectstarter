@@ -1,7 +1,5 @@
-version: 2.1
 
-orbs:
-  slack: circleci/slack@4.1.1
+version: 2.1
 
 jobs:
   build-frontend:
@@ -9,8 +7,8 @@ jobs:
       - image: circleci/node:13.8.0
     steps:
       - checkout
-      - restore_cache:
-          keys: [frontend-build]
+      # - restore_cache:
+      #     keys: [frontend-build]
       - run:
           name: Build front-end
           command: |
@@ -19,18 +17,15 @@ jobs:
             npm run build
       - save_cache:
           paths: [frontend/node_modules]
-          key: frontend-build  # -<< pipeline.id >>
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+          key: frontend-build-<< pipeline.id >>
 
   build-backend:
     docker:
       - image: circleci/node:13.8.0
     steps:
       - checkout
-      - restore_cache:
-          keys: [backend-build]
+      # - restore_cache:
+      #     keys: [backend-build]
       - run:
           name: Back-end build
           command: |
@@ -39,10 +34,7 @@ jobs:
             npm run build
       - save_cache:
           paths: [backend/node_modules]
-          key: backend-build  # -<< pipeline.id >>
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+          key: backend-build-<< pipeline.id >>
 
   test-frontend:
     docker:
@@ -50,15 +42,16 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: ["frontend-build"]  # -<< pipeline.id >>"
+          keys: ["frontend-build-<< pipeline.id >>"]
       - run:
           name: Font-end test
           command: |
             cd frontend
+            npm install oauth
             npm run test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+      # Checkout code from git
+      # Restore from cache
+      # Your job code here
                 
   test-backend:
     docker:
@@ -66,54 +59,15 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: ["backend-build"]  # -<< pipeline.id >>"
+          keys: ["backend-build-<< pipeline.id >>"]
       - run:
           name: Back-end test
           command: |
             cd backend
             npm run test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  scan-frontend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["frontend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Font-end security scan
-          command: |
-            cd frontend
-            npm audit --audit-level=critical
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
-
-  scan-backend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["backend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Back-end security scan
-          command: |
-            cd backend
-            npm audit --audit-level=critical
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
-
+      # Checkout code from git
+      # Restore from cache
+      # Your job code here
 workflows:
   default:
     jobs:
@@ -122,8 +76,4 @@ workflows:
       - test-frontend:
           requires: [build-frontend]
       - test-backend:
-          requires: [build-backend]
-      - scan-frontend:
-          requires: [build-frontend]
-      - scan-backend:
           requires: [build-backend]
