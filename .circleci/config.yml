@@ -1,9 +1,5 @@
 version: 2.1
 
-orbs:
-  slack: circleci/slack@4.1.1
-  aws-cli: circleci/aws-cli@1.3.0
-
 jobs:
   build-frontend:
     docker:
@@ -20,10 +16,7 @@ jobs:
             npm run build
       - save_cache:
           paths: [frontend/node_modules]
-          key: frontend-build  # -<< pipeline.id >>
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+          key: frontend-build
 
   build-backend:
     docker:
@@ -40,10 +33,7 @@ jobs:
             npm run build
       - save_cache:
           paths: [backend/node_modules]
-          key: backend-build  # -<< pipeline.id >>
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+          key: backend-build
 
   test-frontend:
     docker:
@@ -51,105 +41,23 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: ["frontend-build"]  # -<< pipeline.id >>"
+          keys: [frontend-build]
       - run:
           name: Font-end test
           command: |
-            cd frontend
+            cd backend
             npm run test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
+      # Checkout code from git
+      # Restore from cache
+      # Your job code here
                 
   test-backend:
     docker:
       - image: circleci/node:13.8.0
     steps:
-      - checkout
-      - restore_cache:
-          keys: ["backend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Back-end test
-          command: |
-            cd backend
-            npm run test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  scan-frontend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["frontend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Font-end security scan
-          command: |
-            cd frontend
-            npm audit --audit-level=critical
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
-
-  scan-backend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["backend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Back-end security scan
-          command: |
-            cd backend
-            npm audit --audit-level=critical
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
-
-  deploy-infrastructure:
-    docker:
-      - image: cimg/base:2020.01
-    steps:
-      - checkout
-      - aws-cli/setup
-      - run:
-          name: Ensure back-end infrastructure exists
-          command: |
-            aws cloudformation deploy \
-              --template-file .circleci/files/backend.yml \
-              #--tags project=your-tag \
-              # --stack-name "your back-end stack name with workflow id" \
-              # --parameter-overrides ID="your workflow id"  
-              exit 1
-      - run:
-          name: Ensure front-end infrastructure exist
-          command: |
-            aws cloudformation deploy \
-              --template-file .circleci/files/frontend.yml \
-              #--tags project=your-tag \
-              # --stack-name "your front-end stack name with workflow id" \
-              # --parameter-overrides ID="your workflow id"  
-              exit 1
-      - run:
-          name: Add back-end ip to ansible inventory
-          command: |
-            # Your code here
-            exit 1
-      - persist_to_workspace:
-          root: ~/
-          paths:
-            - project/.circleci/ansible/inventory.txt
-      # Here's where you will add some code to rollback on failure 
-
+      # Checkout code from git
+      # Restore from cache
+      # Your job code here
 workflows:
   default:
     jobs:
@@ -158,8 +66,4 @@ workflows:
       - test-frontend:
           requires: [build-frontend]
       - test-backend:
-          requires: [build-backend]
-      - scan-frontend:
-          requires: [build-frontend]
-      - scan-backend:
           requires: [build-backend]
