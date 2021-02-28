@@ -1,5 +1,8 @@
 version: 2.1
 
+orbs:
+  circleci/slack@4.1.1
+
 jobs:
   build-frontend:
     docker:
@@ -46,7 +49,6 @@ jobs:
           name: Font-end test
           command: |
             cd frontend
-            npm install oauth
             npm run test
                 
   test-backend:
@@ -73,18 +75,24 @@ jobs:
           command: |
             cd frontend
             npm audit --audit-level=critical
+      - slack/notify:
+        event: pass
+
   scan-backend:
     docker:
       - image: circleci/node:13.8.0
     steps:
       - checkout
       - restore_cache:
-          keys: ["frontend-build-<< pipeline.id >>"]
+          keys: ["backend-build-<< pipeline.id >>"]
       - run:
           name: Back-end security scan
           command: |
             cd backend
             npm audit --audit-level=critical
+      - slack/notify:
+        event: pass
+
 workflows:
   default:
     jobs:
