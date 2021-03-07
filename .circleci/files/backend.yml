@@ -1,207 +1,36 @@
-version: 2.1
+Description: >
+  UdaPeople backend stack.
+Parameters:
+  ID:
+    Description: Unique identifier.
+    Type: String
 
-orbs:
-  slack: circleci/slack@4.1.1
-  aws-cli: circleci/aws-cli@1.3.0
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub UdaPeople-${ID}
+      GroupDescription: Allow port 22 and port 3030.
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3030
+          ToPort: 3030
+          CidrIp: 0.0.0.0/0
 
-parameters:
-  workflow-id:
-    type: string
-    default: "${CIRCLE_WORKFLOW_ID:0:7}"  # zxctwphpqnhp
-
-jobs:
-  build-frontend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: [frontend-build]
-      - run:
-          name: Build front-end
-          command: |
-            cd frontend
-            npm i
-            npm run build
-      - save_cache:
-          paths: [frontend/node_modules]
-          key: frontend-build  # -<< pipeline.id >>
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  build-backend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: [backend-build]
-      - run:
-          name: Back-end build
-          command: |
-            cd backend
-            npm i
-            npm run build
-      - save_cache:
-          paths: [backend/node_modules]
-          key: backend-build  # -<< pipeline.id >>
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  test-frontend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["frontend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Font-end test
-          command: |
-            cd frontend
-            npm run test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-                
-  test-backend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["backend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Back-end test
-          command: |
-            cd backend
-            npm run test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-
-  scan-frontend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["frontend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Font-end security scan
-          command: |
-            cd frontend
-            npm audit --audit-level=critical
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
-
-  scan-backend:
-    docker:
-      - image: circleci/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: ["backend-build"]  # -<< pipeline.id >>"
-      - run:
-          name: Back-end security scan
-          command: |
-            cd backend
-            npm audit --audit-level=critical
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deploy_1
-
-  deploy-infrastructure:
-    docker:
-      - image: cimg/base:2020.01
-    steps:
-      - checkout
-      - aws-cli/setup
-      - run:
-          name: Ensure back-end infrastructure exists
-          command: |
-            aws cloudformation deploy \
-              --template-file .circleci/files/backend.yml \
-              --stack-name "udapeople-backend-<< pipeline.parameters.workflow-id >>" \
-              --parameter-overrides ID="<< pipeline.parameters.workflow-id >>" \
-              --tags project=udapeople
-      - run:
-          name: Ensure front-end infrastructure exist
-          command: |
-            aws cloudformation deploy \
-              --template-file .circleci/files/frontend.yml \
-              --stack-name "udapeople-frontend-<< pipeline.parameters.workflow-id >>" \
-              --parameter-overrides ID="<< pipeline.parameters.workflow-id >>" \
-              --tags project=udapeople
-      - run:
-          name: Add back-end ip to ansible inventory
-          command: |
-            aws ec2 describe-instances \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --filters "Name=tag:project,Values=udapeople" \
-              --output text >> .circleci/ansible/inventory.txt
-      - persist_to_workspace:
-          root: ~/
-          paths:
-            - project/.circleci/ansible/inventory.txt
-      - run:
-          when: on_fail
-          command: |
-            aws cloudformation delete-stack \
-              --stack-name "udapeople-backend-<< pipeline.parameters.workflow-id >>"
-      - run:
-          when: on_fail
-          command: |
-            aws cloudformation delete-stack \
-              --stack-name "udapeople-frontend-<< pipeline.parameters.workflow-id >>"
-      # Here's where you will add some code to rollback on failure
-
-  configure-infrastructure:
-    docker:
-      - image: python:3.7-alpine3.11
-    steps:
-      - checkout
-      - add_ssh_keys:
-          fingerprints: ["22:65:a4:2b:0b:99:78:46:62:f3:e4:5a:91:d5:66:13"]
-      - attach_workspace:
-          at: ~/
-      - run:
-          name: Install dependencies
-          command: |
-            apk add --update ansible
-      - run:
-          name: Configure server
-          command: |
-            cat .circleci/ansible/inventory.txt
-            exit 0
-      # Here's where you will add some code to rollback on failure  
-
-workflows:
-  default:
-    jobs:
-      # - build-frontend
-      # - build-backend
-      # - test-frontend:
-      #     requires: [build-frontend]
-      # - test-backend:
-      #     requires: [build-backend]
-      # - scan-frontend:
-      #     requires: [build-frontend]
-      # - scan-backend:
-      #     requires: [build-backend]
-      - deploy-infrastructure  #:
-          # requires: [test-frontend, test-backend, scan-frontend, scan-backend]
-          # filters:
-          #   branches:
-          #     only: [test-feature-branch]
-      - configure-infrastructure:
-          requires: [deploy-infrastructure]
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      SecurityGroups:
+        - Ref: InstanceSecurityGroup
+      KeyName: udacity # If you use another key pair name, you should change this value to match.
+      # If this ami id is not available for you, you can find another (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html)
+      # Ubuntu 18 or higher works fine
+      ImageId: ami-089d839e690b09b28
+      Tags:
+        - Key: Name
+          Value: !Sub backend-${ID}
