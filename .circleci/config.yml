@@ -7,7 +7,7 @@ orbs:
 parameters:
   workflow-id:
     type: string
-    default: "${CIRCLE_WORKFLOW_ID:0:7}"
+    default: "${CIRCLE_WORKFLOW_ID:0:7}"  # zxctwphpqnhp
   memstash-token:
     type: string
     default: "b9461c43-6888-4d04-8e76-7beeddbb863c"
@@ -25,7 +25,6 @@ commands:
               --stack-name "udapeople-backend-<< pipeline.parameters.workflow-id >>"
             aws cloudformation delete-stack \
               --stack-name "udapeople-frontend-<< pipeline.parameters.workflow-id >>"
-
   revert-migrations:
     description: Revert the last migration if successfully run in the current workflow.
     # parameters:
@@ -44,7 +43,6 @@ commands:
               npm install
               npm run migrations:revert
             fi
-
 jobs:
   build-frontend:
     docker:
@@ -57,9 +55,8 @@ jobs:
           name: Build front-end
           command: |
             cd frontend
-            sudo npm install webpack-dev-server -g
-            sudo npm install
-            sudo npm run build
+            npm i
+            npm run build
       - save_cache:
           paths: [frontend/node_modules]
           key: frontend-build  # -<< pipeline.id >>
@@ -214,19 +211,16 @@ jobs:
           name: Configure server
           command: |
             echo ENVIRONMENT=production > "backend/.env"
-
             echo TYPEORM_CONNECTION=postgres >> "backend/.env"
             echo TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts >> "backend/.env"
             echo TYPEORM_MIGRATIONS=./src/migrations/*.ts >> "backend/.env"
             echo TYPEORM_MIGRATIONS_DIR=./src/migrations >> "backend/.env"
             echo NODE_ENV=production >> "backend/.env"
-
             echo TYPEORM_HOST=$TYPEORM_HOST >> "backend/.env"
             echo TYPEORM_PORT=$TYPEORM_PORT >> "backend/.env"
             echo TYPEORM_USERNAME=$TYPEORM_USERNAME >> "backend/.env"
             echo TYPEORM_PASSWORD=$TYPEORM_PASSWORD >> "backend/.env"
             echo TYPEORM_DATABASE=$TYPEORM_DATABASE >> "backend/.env"
-
             ansible-playbook \
               -i .circleci/ansible/inventory.txt \
               .circleci/ansible/configure-server.yml
@@ -249,13 +243,11 @@ jobs:
           name: Run migrations
           command: |
             echo ENVIRONMENT=production > "backend/.env"
-
             echo TYPEORM_CONNECTION=postgres >> "backend/.env"
             echo TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts >> "backend/.env"
             echo TYPEORM_MIGRATIONS=./src/migrations/*.ts >> "backend/.env"
             echo TYPEORM_MIGRATIONS_DIR=./src/migrations >> "backend/.env"
             echo NODE_ENV=production >> "backend/.env"
-
             echo TYPEORM_HOST=$TYPEORM_HOST >> "backend/.env"
             echo TYPEORM_PORT=$TYPEORM_PORT >> "backend/.env"
             echo TYPEORM_USERNAME=$TYPEORM_USERNAME >> "backend/.env"
@@ -298,11 +290,9 @@ jobs:
           command: |
             export BACKEND_IP=$(sed -n 2p .circleci/ansible/inventory.txt)
             export API_URL="http://${BACKEND_IP}:3030"
-
             echo ENVIRONMENT=production > "frontend/.env"
             echo NODE_ENV=production >> "frontend/.env"
             echo API_URL=$API_URL >> "frontend/.env"
-
             echo $API_URL
       - run:
           name: Build frontend
@@ -383,7 +373,6 @@ jobs:
           command: |
             URL="http://udapeople-<< pipeline.parameters.workflow-id >>.s3-website-eu-west-3.amazonaws.com"
             echo $URL
-
             if curl -s ${URL} | grep "Welcome"
             then
             return 1
@@ -407,26 +396,31 @@ jobs:
           name: Install dependencies
           command: |
             apk add --update py3-pip && pip3 install --upgrade pip && pip3 install awscli
-            apk add --update curl
       - run:
           name: Save old workflow ID
           command: |
             export OldWorkflowID=$(aws cloudformation list-exports \
               --query "Exports[?Name==\`WorkflowID\`].Value" \
               --no-paginate --output text)
-
+            export STACKS=($(aws cloudformation list-stacks \
+              --query "StackSummaries[*].StackName" \
+              --stack-status-filter CREATE_COMPLETE \
+              --no-paginate --output text))
             echo "Old Workflow ID: ${OldWorkflowID}"
-
-            curl -H "Content-Type: text/plain" \
-              -H "token: << pipeline.parameters.memstash-token >>" \
-              --request PUT --data $OldWorkflowID \
-              https://api.memstash.io/values/old_workflow_id_${CIRCLE_WORKFLOW_ID}
+            echo "Stacks: ${STACKS}" 
+            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
+            then
+              curl -H "Content-Type: text/plain" \
+                -H "token: << pipeline.parameters.memstash-token >>" \
+                --request PUT --data $OldWorkflowID \
+                https://api.memstash.io/values/old_workflow_id_${CIRCLE_WORKFLOW_ID}
+            fi
       - run:
           name: Update cloudfront distribution
           command: |
             aws cloudformation deploy \
               --template-file .circleci/files/cloudfront.yml \
-              --stack-name "udapeople-cloudfront" \
+              --stack-name "udapeople-cloudfront-<< pipeline.parameters.workflow-id >>" \
               --parameter-overrides WorkflowID="<< pipeline.parameters.workflow-id >>" \
               --tags project=udapeople
       - revert-migrations
@@ -438,37 +432,42 @@ jobs:
     steps:
       - checkout
       - aws-cli/setup
+      # - run:
+      #     name: Get old stack workflow id
+      #     command: |
+      #       export OldWorkflowID=$(aws cloudformation list-exports \
+      #         --query "Exports[?Name==\`WorkflowID\`].Value" \
+      #         --no-paginate --output text)
+      #       export STACKS=($(aws cloudformation list-stacks \
+      #         --query "StackSummaries[*].StackName" \
+      #         --stack-status-filter CREATE_COMPLETE \
+      #         --no-paginate --output text))
       - run:
           name: Remove old stacks and files
           command: |
             export OldWorkflowID=$(curl -H "token: << pipeline.parameters.memstash-token >>" --request GET https://api.memstash.io/values/old_workflow_id_${CIRCLE_WORKFLOW_ID})
             echo "Old Workflow ID: ${OldWorkflowID}"
-
-            if [ "${OldWorkflowID}" != "<< pipeline.parameters.workflow-id >>" ]
-            then
-              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
-              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
-              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
-            fi
-
+            aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+            aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+            aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
 workflows:
   default:
     jobs:
-      - build-frontend
-      - build-backend
-      - test-frontend:
-          requires: [build-frontend]
-      - test-backend:
-          requires: [build-backend]
-      - scan-frontend:
-          requires: [build-frontend]
-      - scan-backend:
-          requires: [build-backend]
+      # - build-frontend
+      # - build-backend
+      # - test-frontend:
+      #     requires: [build-frontend]
+      # - test-backend:
+      #     requires: [build-backend]
+      # - scan-frontend:
+      #     requires: [build-frontend]
+      # - scan-backend:
+      #     requires: [build-backend]
       - deploy-infrastructure:
-          requires: [test-frontend, test-backend, scan-frontend, scan-backend]
+          # requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
             branches:
-              only: [main]
+              only: [main] # test-feature-branch
       - configure-infrastructure:
           requires: [deploy-infrastructure]
       - run-migrations:
@@ -476,7 +475,7 @@ workflows:
       - deploy-backend:
           requires: [run-migrations]
       - deploy-frontend:
-          requires: [run-migrations]
+          requires: [deploy-backend]
       - smoke-test:
           requires: [deploy-backend, deploy-frontend]
       - cloudfront-update:
