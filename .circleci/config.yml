@@ -366,7 +366,7 @@ jobs:
             then
             return 1
             else
-            return 1
+            return 0
             fi
       - run:
           name: Frontend smoke test.
@@ -396,31 +396,24 @@ jobs:
           name: Install dependencies
           command: |
             apk add --update py3-pip && pip3 install --upgrade pip && pip3 install awscli
+            apk add --update curl
       - run:
           name: Save old workflow ID
           command: |
             export OldWorkflowID=$(aws cloudformation list-exports \
               --query "Exports[?Name==\`WorkflowID\`].Value" \
               --no-paginate --output text)
-            export STACKS=($(aws cloudformation list-stacks \
-              --query "StackSummaries[*].StackName" \
-              --stack-status-filter CREATE_COMPLETE \
-              --no-paginate --output text))
             echo "Old Workflow ID: ${OldWorkflowID}"
-            echo "Stacks: ${STACKS}" 
-            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
-            then
-              curl -H "Content-Type: text/plain" \
-                -H "token: << pipeline.parameters.memstash-token >>" \
-                --request PUT --data $OldWorkflowID \
-                https://api.memstash.io/values/old_workflow_id_${CIRCLE_WORKFLOW_ID}
-            fi
+            curl -H "Content-Type: text/plain" \
+              -H "token: << pipeline.parameters.memstash-token >>" \
+              --request PUT --data $OldWorkflowID \
+              https://api.memstash.io/values/old_workflow_id_${CIRCLE_WORKFLOW_ID}
       - run:
           name: Update cloudfront distribution
           command: |
             aws cloudformation deploy \
               --template-file .circleci/files/cloudfront.yml \
-              --stack-name "udapeople-cloudfront-<< pipeline.parameters.workflow-id >>" \
+              --stack-name "udapeople-cloudfront" \
               --parameter-overrides WorkflowID="<< pipeline.parameters.workflow-id >>" \
               --tags project=udapeople
       - revert-migrations
@@ -432,24 +425,17 @@ jobs:
     steps:
       - checkout
       - aws-cli/setup
-      # - run:
-      #     name: Get old stack workflow id
-      #     command: |
-      #       export OldWorkflowID=$(aws cloudformation list-exports \
-      #         --query "Exports[?Name==\`WorkflowID\`].Value" \
-      #         --no-paginate --output text)
-      #       export STACKS=($(aws cloudformation list-stacks \
-      #         --query "StackSummaries[*].StackName" \
-      #         --stack-status-filter CREATE_COMPLETE \
-      #         --no-paginate --output text))
       - run:
           name: Remove old stacks and files
           command: |
             export OldWorkflowID=$(curl -H "token: << pipeline.parameters.memstash-token >>" --request GET https://api.memstash.io/values/old_workflow_id_${CIRCLE_WORKFLOW_ID})
             echo "Old Workflow ID: ${OldWorkflowID}"
-            aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
-            aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
-            aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+            if [ "${OldWorkflowID}" != "<< pipeline.parameters.workflow-id >>" ]
+            then
+              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+            fi
 workflows:
   default:
     jobs:
@@ -467,7 +453,7 @@ workflows:
           # requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
             branches:
-              only: [master] # test-feature-branch
+              only: [main] # test-feature-branch
       - configure-infrastructure:
           requires: [deploy-infrastructure]
       - run-migrations:
