@@ -1,4 +1,3 @@
-
 ---
 
 - name: "configuration play." 
@@ -36,3 +35,4 @@
 
   roles:
     - configure-server
+    - configure-prometheus-node-exporter
